@@ -11,6 +11,7 @@ from collections.abc import Iterable
 from typing import Dict, Optional, Set, Union
 from urllib.parse import urlparse, urlunparse
 from urllib.request import urlopen
+from .mpv_player import MpvMediaPlayer
 
 # pylint: disable=no-name-in-module
 from aioesphomeapi.api_pb2 import (  # type: ignore[attr-defined]
@@ -278,8 +279,8 @@ class VoiceSatelliteProtocol(APIServer):
             assert self.state.media_player_entity is not None
 
             urls = []
-            if msg.preannounce_media_id:
-                urls.append(msg.preannounce_media_id)
+            #if msg.preannounce_media_id:
+            #    urls.append(msg.preannounce_media_id)
 
             urls.append(msg.media_id)
 
@@ -287,6 +288,7 @@ class VoiceSatelliteProtocol(APIServer):
             self._continue_conversation = msg.start_conversation
 
             self.duck()
+            self.state.tts_player = MpvMediaPlayer()
             self.state.tts_player.play(urls, done_callback=self._tts_finished)
         elif isinstance(msg, VoiceAssistantTimerEventResponse):
             self.handle_timer_event(VoiceAssistantTimerEventType(msg.event_type), msg)
