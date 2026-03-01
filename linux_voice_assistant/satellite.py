@@ -11,6 +11,7 @@ from collections.abc import Iterable
 from typing import Dict, Optional, Set, Union
 from urllib.parse import urlparse, urlunparse
 from urllib.request import urlopen
+from functools import partial
 
 # pylint: disable=no-name-in-module
 from aioesphomeapi.api_pb2 import (  # type: ignore[attr-defined]
@@ -422,12 +423,21 @@ class VoiceSatelliteProtocol(APIServer):
 
         wake_word_phrase = wake_word.wake_word
         _LOGGER.debug("Detected wake word: %s", wake_word_phrase)
-        self.send_messages(
-            [VoiceAssistantRequest(start=True, wake_word_phrase=wake_word_phrase)]
-        )
+        
         self.duck()
-        self._is_streaming_audio = True
-        self.state.tts_player.play(self.state.wakeup_sound)
+        
+        # if we have a wakeup sound play it. In the callback
+        # we send the wakeup event and start sending audio to AH
+        if self.state.wakeup_sound:
+            _LOGGER.debug("Playing wakeup sound: %s", self.state.wakeup_sound)
+            # call the callback, passing the wake_word_phase
+            callback = partial(self._wakeup_sound_finished, wake_word_phrase)
+            self.state.tts_player.play(self.state.wakeup_sound, done_callback=callback)
+        else:
+            _LOGGER.debug("No wakeup sound, start listening")
+            # if we do not have a wakeup sound then we just start
+            # listiening instantly
+            self._wakeup_sound_finished(wake_word_phrase)
 
     def stop(self) -> None:
         self.state.active_wake_words.discard(self.state.stop_word.id)
@@ -472,6 +482,14 @@ class VoiceSatelliteProtocol(APIServer):
             self.unduck()
 
         _LOGGER.debug("TTS response finished")
+    
+    def _wakeup_sound_finished(self, wake_word_phrase) -> None:
+        _LOGGER.debug("Wakeup sound finished")
+        self.send_messages(
+            [VoiceAssistantRequest(start=True, wake_word_phrase=wake_word_phrase)]
+        )
+        # we can now start streaming the audio
+        self._is_streaming_audio = True
 
     def _play_timer_finished(self) -> None:
         if not self._timer_finished:
